@@ -1,7 +1,10 @@
 "use client"
 
 import React, { useState, ChangeEvent, FormEvent } from 'react';
+import Link from 'next/link';
 import { CheckCircle, AlertCircle, Send, Award, DollarSign, FileText } from 'lucide-react';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 interface FormData {
   fullName: string;
@@ -29,16 +32,41 @@ export default function ScholarshipAcceptance(): React.ReactElement {
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [submitted, setSubmitted] = useState<boolean>(false);
   const [understoodDisbursement, setUnderstoodDisbursement] = useState<boolean>(false);
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [submitError, setSubmitError] = useState<string>('');
 
   const handleChange = (e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>): void => {
     const { name, value } = e.target;
     setFormData({ ...formData, [name]: value });
   };
 
-  const handleSubmit = (e: FormEvent<HTMLFormElement>): void => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault();
-    console.log('Form submitted:', formData);
-    setSubmitted(true);
+    setSubmitError('');
+    setSubmitting(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/acceptance-forms`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          ...formData,
+          acceptedTerms: formData.agreedToTerms === 'yes',
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.success) {
+        throw new Error(data.message || data.error || 'Failed to submit acceptance form');
+      }
+
+      setSubmitted(true);
+    } catch (error) {
+      console.error('Acceptance form submission error:', error);
+      setSubmitError(error instanceof Error ? error.message : 'Failed to submit acceptance form');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const nextPage = (): void => {
@@ -65,16 +93,42 @@ export default function ScholarshipAcceptance(): React.ReactElement {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-2xl text-center">
-          <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-6" />
-          <h1 className="text-4xl font-bold text-gray-800 mb-4">Form Submitted Successfully!</h1>
-          <p className="text-lg text-gray-600 mb-6">
-            Thank you for submitting your Scholarship Award Acceptance Form. We have received your information and will process your request shortly.
-          </p>
-          <p className="text-gray-600">
-            If you have any questions, please contact us at (909) 426-0773
-          </p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white shadow-lg">
+          <div className="max-w-5xl mx-auto px-6 py-8">
+            <div className="flex items-center gap-6">
+              <img
+                src="/Logo.png"
+                alt="Children's Foundation of America Logo"
+                className="h-16 w-16 object-contain flex-shrink-0"
+              />
+              <div>
+                <h1 className="text-3xl font-bold text-indigo-900 mb-2">
+                  Scholarship Award Acceptance Form
+                </h1>
+                <p className="text-gray-600">Children's Foundation of America</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-3xl mx-auto p-4 sm:p-6 md:p-10">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 text-center">
+            <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-6" />
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">Form Submitted Successfully!</h1>
+            <p className="text-lg text-gray-600 mb-6">
+              Thank you for submitting your Scholarship Award Acceptance Form. We have received your information and will process your request shortly.
+            </p>
+            <p className="text-gray-600 mb-8">
+              If you have any questions, please contact us at (909) 426-0773
+            </p>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Back to Home
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -504,14 +558,21 @@ export default function ScholarshipAcceptance(): React.ReactElement {
               ) : (
                 <button
                   type="submit"
-                  className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 transition-colors flex items-center"
+                  disabled={submitting}
+                  className="px-8 py-3 bg-green-600 text-white rounded-lg font-semibold hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex items-center"
                 >
                   <Send className="w-5 h-5 mr-2" />
-                  Submit Form
+                  {submitting ? 'Submitting...' : 'Submit Form'}
                 </button>
               )}
             </div>
           </form>
+
+          {submitError && (
+            <div className="mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+              {submitError}
+            </div>
+          )}
         </div>
 
         {/* Footer */}

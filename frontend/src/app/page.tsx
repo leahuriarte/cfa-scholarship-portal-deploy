@@ -2,11 +2,11 @@
 
 import React from 'react';
 import Link from 'next/link';
-import { FileText, Award, RefreshCw, ArrowRight, LogIn, LogOut } from 'lucide-react';
+import { FileText, Award, RefreshCw, ArrowRight, LogIn, LogOut, Shield } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
 export default function Home() {
-  const { user, loading, logout } = useAuth();
+  const { user, loading, logout, isAdmin } = useAuth();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
@@ -31,6 +31,15 @@ export default function Home() {
               <div className="flex items-center gap-4">
                 {user ? (
                   <>
+                    {isAdmin && (
+                      <Link
+                        href="/admin"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-indigo-600 text-white text-sm font-medium hover:bg-indigo-700 transition-colors"
+                      >
+                        <Shield className="w-4 h-4" />
+                        Admin Page
+                      </Link>
+                    )}
                     <span className="text-sm text-gray-600">
                       {user.profile.firstName} {user.profile.lastName}
                     </span>

@@ -38,13 +38,14 @@ const AcceptanceFormSchema = new mongoose_1.Schema({
     userId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "User",
-        required: true,
+        required: false,
         index: true,
+        sparse: true,
     },
     applicationId: {
         type: mongoose_1.Schema.Types.ObjectId,
         ref: "Application",
-        required: true,
+        required: false,
     },
     acceptedTerms: {
         type: Boolean,
@@ -59,6 +60,13 @@ const AcceptanceFormSchema = new mongoose_1.Schema({
         type: String,
         required: true,
     },
+    fullName: String,
+    companyName: String,
+    companyAddress: String,
+    companyPhone: String,
+    requestAmount: String,
+    cardLastFour: String,
+    formPurpose: String,
 }, {
     timestamps: true,
 });

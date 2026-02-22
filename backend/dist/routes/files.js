@@ -8,6 +8,7 @@ const multer_1 = __importDefault(require("multer"));
 const s3Upload_1 = require("../utils/s3Upload");
 const File_1 = __importDefault(require("../models/File"));
 const mongoose_1 = __importDefault(require("mongoose"));
+const auth_1 = require("../middleware/auth");
 const router = (0, express_1.Router)();
 // Configure multer to store files in memory (we'll upload directly to S3)
 const upload = (0, multer_1.default)({
@@ -95,8 +96,9 @@ router.post("/upload", upload.single("file"), async (req, res) => {
 /**
  * GET /api/files/:fileId
  * Get file metadata by ID
+ * Accesible to: owner or admin
  */
-router.get("/:fileId", async (req, res) => {
+router.get("/:fileId", (0, auth_1.requireOwnershipOrAdmin)('userId'), async (req, res) => {
     try {
         const { fileId } = req.params;
         if (!mongoose_1.default.Types.ObjectId.isValid(fileId)) {
@@ -160,8 +162,9 @@ router.get("/entity/:entityType/:entityId", async (req, res) => {
  * DELETE /api/files/:fileId
  * Soft delete a file (marks as deleted but doesn't remove from S3)
  * To permanently delete from S3, include ?permanent=true
+ * Accesible to: owner or admin
  */
-router.delete("/:fileId", async (req, res) => {
+router.delete("/:fileId", (0, auth_1.requireOwnershipOrAdmin)('userId'), async (req, res) => {
     try {
         const { fileId } = req.params;
         const { permanent } = req.query;

@@ -33,6 +33,7 @@ router.post("/", async (req, res) => {
     }
 });
 // GET /api/renewal-checklists - Get all renewal checklists (with filters)
+// Accessible to: admin
 router.get("/", async (req, res) => {
     try {
         const { userId, applicationId, academicYear, status, limit = 50, skip = 0, } = req.query;
@@ -71,6 +72,7 @@ router.get("/", async (req, res) => {
     }
 });
 // GET /api/renewal-checklists/:id - Get a specific renewal checklist
+// Accessible to: owner or admin
 router.get("/:id", async (req, res) => {
     try {
         const checklist = await RenewalChecklist_1.default.findById(req.params.id)
@@ -98,6 +100,7 @@ router.get("/:id", async (req, res) => {
     }
 });
 // PATCH /api/renewal-checklists/:id/review - Review a renewal checklist (admin)
+// Accessible to: admin only
 router.patch("/:id/review", async (req, res) => {
     try {
         const { reviewedBy, adminNotes, status } = req.body;

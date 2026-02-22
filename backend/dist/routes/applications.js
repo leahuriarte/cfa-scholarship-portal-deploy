@@ -7,6 +7,7 @@ const express_1 = require("express");
 const Application_1 = __importDefault(require("../models/Application"));
 const router = (0, express_1.Router)();
 // POST /api/applications/new - Create a new application
+// Accessible to: logged in users
 router.post("/new", async (req, res) => {
     try {
         const applicationData = {
@@ -34,6 +35,7 @@ router.post("/new", async (req, res) => {
     }
 });
 // POST /api/applications/renewal - Create a renewal application
+// Accessible to: logged in users
 router.post("/renewal", async (req, res) => {
     try {
         const applicationData = {
@@ -61,6 +63,7 @@ router.post("/renewal", async (req, res) => {
     }
 });
 // GET /api/applications - Get all applications (with filters)
+// Accessible to: admin only
 router.get("/", async (req, res) => {
     try {
         const { userId, applicationType, status, academicYear, limit = 50, skip = 0, } = req.query;
@@ -98,6 +101,8 @@ router.get("/", async (req, res) => {
     }
 });
 // GET /api/applications/:id - Get a specific application
+// Accessible to: owner or admin
+// NOTE:  middleware expects the owner id to be in req.params.userId, req.body.userId, req.query.userId
 router.get("/:id", async (req, res) => {
     try {
         const application = await Application_1.default.findById(req.params.id)
@@ -125,6 +130,7 @@ router.get("/:id", async (req, res) => {
     }
 });
 // PATCH /api/applications/:id/status - Update application status (admin only)
+// Accessible to: admin only
 router.patch("/:id/status", async (req, res) => {
     try {
         const { status, reviewedBy } = req.body;
@@ -155,6 +161,7 @@ router.patch("/:id/status", async (req, res) => {
     }
 });
 // POST /api/applications/:id/notes - Add admin note to application
+// Accessible to: admin only
 router.post("/:id/notes", async (req, res) => {
     try {
         const { note, createdBy } = req.body;
@@ -184,6 +191,37 @@ router.post("/:id/notes", async (req, res) => {
         res.status(500).json({
             success: false,
             message: "Failed to add note",
+            error: error.message,
+        });
+    }
+});
+// DELETE /api/applications/:id/notes/:noteId - Delete admin note from application
+// Accessible to: admin only
+router.delete("/:id/notes/:noteId", async (req, res) => {
+    try {
+        const { id, noteId } = req.params;
+        const application = await Application_1.default.findOneAndUpdate({ _id: id, "adminNotes._id": noteId }, {
+            $pull: {
+                adminNotes: { _id: noteId },
+            },
+        }, { new: true });
+        if (!application) {
+            return res.status(404).json({
+                success: false,
+                message: "Application or note not found",
+            });
+        }
+        res.json({
+            success: true,
+            message: "Note deleted successfully",
+            application,
+        });
+    }
+    catch (error) {
+        console.error("Error deleting note:", error);
+        res.status(500).json({
+            success: false,
+            message: "Failed to delete note",
             error: error.message,
         });
     }

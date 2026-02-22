@@ -6,10 +6,37 @@ const router = Router();
 // POST /api/acceptance-forms - Create a new acceptance form
 router.post("/", async (req: Request, res: Response) => {
   try {
+    const forwardedFor = req.headers["x-forwarded-for"];
+    const clientIp = Array.isArray(forwardedFor)
+      ? forwardedFor[0]
+      : typeof forwardedFor === "string"
+        ? forwardedFor.split(",")[0].trim()
+        : req.socket.remoteAddress || req.ip || "unknown";
+
     const formData = {
-      ...req.body,
+      userId: req.body.userId || undefined,
+      applicationId: req.body.applicationId || undefined,
+      acceptedTerms:
+        typeof req.body.acceptedTerms === "boolean"
+          ? req.body.acceptedTerms
+          : req.body.agreedToTerms === "yes",
       acceptedAt: new Date(),
+      ipAddress: req.body.ipAddress || clientIp,
+      fullName: req.body.fullName,
+      companyName: req.body.companyName,
+      companyAddress: req.body.companyAddress,
+      companyPhone: req.body.companyPhone,
+      requestAmount: req.body.requestAmount,
+      cardLastFour: req.body.cardLastFour,
+      formPurpose: req.body.formPurpose,
     };
+
+    if (!formData.acceptedTerms) {
+      return res.status(400).json({
+        success: false,
+        message: "Terms must be accepted before submitting the form",
+      });
+    }
 
     const form = new AcceptanceForm(formData);
     await form.save();

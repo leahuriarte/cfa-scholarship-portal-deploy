@@ -90,6 +90,7 @@ interface Application {
     recommendationLetter: { submitted: boolean };
   };
   adminNotes: Array<{
+    _id?: string;
     note: string;
     createdBy: any;
     createdAt: string;
@@ -280,13 +281,15 @@ function ComplianceItem({ label, value }: { label: string; value: boolean }) {
 
 // --- Application Detail ---
 
-function ApplicationDetail({ app, onStatusChange, onNoteAdded }: {
+function ApplicationDetail({ app, onStatusChange, onNoteAdded, onNoteDeleted }: {
   app: Application;
   onStatusChange: (id: string, status: AppStatus) => void;
-  onNoteAdded: (id: string, note: string) => void;
+  onNoteAdded: (id: string, note: Application['adminNotes'][number]) => void;
+  onNoteDeleted: (id: string, noteId: string) => void;
 }) {
   const [newNote, setNewNote] = useState('');
   const [noteLoading, setNoteLoading] = useState(false);
+  const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState('');
 
   const handleStatusChange = async (newStatus: AppStatus) => {
@@ -321,13 +324,34 @@ function ApplicationDetail({ app, onStatusChange, onNoteAdded }: {
       });
       const data = await res.json();
       if (data.success) {
-        onNoteAdded(app._id, newNote);
+        const notes = data.application?.adminNotes;
+        const createdNote = Array.isArray(notes) && notes.length > 0 ? notes[notes.length - 1] : undefined;
+        onNoteAdded(app._id, createdNote ?? { note: newNote, createdBy: null, createdAt: new Date().toISOString() });
         setNewNote('');
       }
     } catch (err) {
       console.error('Failed to add note:', err);
     } finally {
       setNoteLoading(false);
+    }
+  };
+
+  const handleDeleteNote = async (noteId?: string) => {
+    if (!noteId) return;
+    setDeletingNoteId(noteId);
+    try {
+      const res = await fetch(`${API_BASE}/api/applications/${app._id}/notes/${noteId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      const data = await res.json();
+      if (data.success) {
+        onNoteDeleted(app._id, noteId);
+      }
+    } catch (err) {
+      console.error('Failed to delete note:', err);
+    } finally {
+      setDeletingNoteId(null);
     }
   };
 
@@ -487,9 +511,21 @@ function ApplicationDetail({ app, onStatusChange, onNoteAdded }: {
         {app.adminNotes && app.adminNotes.length > 0 ? (
           <div className="space-y-2 mb-4">
             {app.adminNotes.map((n, i) => (
-              <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <p className="text-sm text-gray-800">{n.note}</p>
-                <p className="text-xs text-gray-400 mt-1">{formatDate(n.createdAt)}</p>
+              <div key={n._id || i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-800">{n.note}</p>
+                    <p className="text-xs text-gray-400 mt-1">{formatDate(n.createdAt)}</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleDeleteNote(n._id)}
+                    disabled={!n._id || deletingNoteId === n._id}
+                    className="px-2 py-1 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded disabled:opacity-40 disabled:cursor-not-allowed"
+                  >
+                    {deletingNoteId === n._id ? 'Deleting...' : 'Delete'}
+                  </button>
+                </div>
               </div>
             ))}
           </div>
@@ -695,10 +731,11 @@ function ReimbursementDetail({ reimbursement, onStatusChange }: {
 
 // --- Student Card (groups applications by student) ---
 
-function StudentCard({ student, onStatusChange, onNoteAdded }: {
+function StudentCard({ student, onStatusChange, onNoteAdded, onNoteDeleted }: {
   student: StudentGroup;
   onStatusChange: (id: string, status: AppStatus) => void;
-  onNoteAdded: (id: string, note: string) => void;
+  onNoteAdded: (id: string, note: Application['adminNotes'][number]) => void;
+  onNoteDeleted: (id: string, noteId: string) => void;
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
@@ -776,6 +813,7 @@ function StudentCard({ student, onStatusChange, onNoteAdded }: {
                       app={app}
                       onStatusChange={onStatusChange}
                       onNoteAdded={onNoteAdded}
+                      onNoteDeleted={onNoteDeleted}
                     />
                   </div>
                 )}
@@ -864,10 +902,15 @@ export default function AdminPage() {
   const fetchAcceptanceForms = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/acceptance-forms`, { credentials: 'include' });
+      if (!res.ok) {
+        throw new Error(`Acceptance forms request failed (${res.status})`);
+      }
       const data = await res.json();
       if (data.success) setAcceptanceForms(data.forms);
+      else throw new Error(data.message || 'Failed to fetch acceptance forms');
     } catch (err) {
       console.error('Failed to fetch acceptance forms:', err);
+      setAcceptanceForms([]);
     }
   };
 
@@ -903,11 +946,21 @@ export default function AdminPage() {
     );
   };
 
-  const handleNoteAdded = (id: string, note: string) => {
+  const handleNoteAdded = (id: string, note: Application['adminNotes'][number]) => {
     setApplications((prev) =>
       prev.map((a) =>
         a._id === id
-          ? { ...a, adminNotes: [...a.adminNotes, { note, createdBy: user?._id || '', createdAt: new Date().toISOString() }] }
+          ? { ...a, adminNotes: [...a.adminNotes, note] }
+          : a
+      )
+    );
+  };
+
+  const handleNoteDeleted = (id: string, noteId: string) => {
+    setApplications((prev) =>
+      prev.map((a) =>
+        a._id === id
+          ? { ...a, adminNotes: a.adminNotes.filter((n) => n._id !== noteId) }
           : a
       )
     );
@@ -1007,7 +1060,13 @@ export default function AdminPage() {
             </span>
           </div>
           {students.map((student) => (
-            <StudentCard key={student.email} student={student} onStatusChange={handleStatusChange} onNoteAdded={handleNoteAdded} />
+            <StudentCard
+              key={student.email}
+              student={student}
+              onStatusChange={handleStatusChange}
+              onNoteAdded={handleNoteAdded}
+              onNoteDeleted={handleNoteDeleted}
+            />
           ))}
         </div>
       );
@@ -1026,13 +1085,30 @@ export default function AdminPage() {
         <div>
           {checklists.map((cl) => {
             const isExpanded = expandedId === cl._id;
+            const userName = [cl.userId?.profile?.firstName, cl.userId?.profile?.lastName]
+              .filter(Boolean)
+              .join(' ')
+              || cl.applicationId?.personalInfo?.fullName
+              || 'Unknown student';
+            const userEmail = cl.userId?.email || cl.applicationId?.personalInfo?.email || 'No email';
+            const collegeName = cl.applicationId?.educationInfo?.collegeName;
+            const appType = cl.applicationId?.applicationType;
             return (
               <div key={cl._id} className="border-b border-gray-100 last:border-b-0">
                 <button onClick={() => setExpandedId(isExpanded ? null : cl._id)} className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left">
                   <div className="flex-1 min-w-0">
+                    <div className="text-sm font-semibold text-gray-900 truncate">
+                      {userName}
+                    </div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-medium text-gray-900">{cl.academicYear} — {cl.reportingPeriod}</span>
                       <StatusBadge status={cl.status} />
+                      {appType && <TypeBadge type={appType} />}
+                    </div>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                      <span>{userEmail}</span>
+                      {collegeName && <span>{collegeName}</span>}
+                      <span className="text-gray-400">Checklist #{cl._id.slice(-6).toUpperCase()}</span>
                     </div>
                     <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
                       <span>GPA: {cl.academicUpdate.currentGPA}</span>

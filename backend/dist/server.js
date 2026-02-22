@@ -5,64 +5,63 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 require("dotenv/config");
 const express_1 = __importDefault(require("express"));
+const express_session_1 = __importDefault(require("express-session"));
 const cors_1 = __importDefault(require("cors"));
 const mongoose_1 = __importDefault(require("mongoose"));
-// import session from "express-session";
-// import MongoStore from "connect-mongo";
-// import passport from "./utils/passportConfig";
-const routes_1 = __importDefault(require("./routes"));
-// Import all models to ensure they're registered with Mongoose
-require("./models/User");
-require("./models/Application");
-require("./models/RenewalChecklist");
-require("./models/AcceptanceForm");
-require("./models/ReimbursementRequest");
-require("./models/File");
-const BACKEND_PORT = Number(process.env.BACKEND_PORT ?? 8080);
-const FRONTEND_ADDRESS = process.env.FRONTEND_ADDRESS ?? "*";
-const SESSION_SECRET = process.env.SESSION_SECRET ?? "dev-secret";
-const PRODUCTION = process.env.PRODUCTION_STR === "true";
-const DB_URL = process.env.DB_URL ?? process.env.MONGO_URI ?? "mongodb://db:27017/cfa";
+const connect_mongo_1 = __importDefault(require("connect-mongo"));
+const index_1 = __importDefault(require("./routes/index"));
+require("./utils/passportConfig");
+const passport_1 = __importDefault(require("passport"));
+const { BACKEND_PORT = '8080', FRONTEND_ADDRESS = 'http://localhost:3000', FRONTEND_ADDRESSES = '', SESSION_SECRET = 'replace-me', PRODUCTION_STR = 'false', DB_URL = 'mongodb://db:27017/cfa', } = process.env;
+const isProduction = PRODUCTION_STR === 'true';
+const configuredOrigins = [FRONTEND_ADDRESS, ...FRONTEND_ADDRESSES.split(',')]
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins);
 const app = (0, express_1.default)();
 mongoose_1.default
     .connect(DB_URL)
-    .then(() => console.log("Connected to database."))
-    .catch((err) => console.error(`Error: ${err}`));
+    .then(() => console.log("Connected to database: " + DB_URL))
+    .catch((err) => {
+    console.error(`Error: ${err}`);
+    process.exit(1);
+});
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use(express_1.default.json());
 app.use((0, cors_1.default)({
-    origin: FRONTEND_ADDRESS === "*" ? "*" : FRONTEND_ADDRESS,
+    origin: (origin, callback) => {
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.has(origin))
+            return callback(null, true);
+        // In local development, allow frontend running on an alternate localhost port (e.g. 3001).
+        if (!isProduction && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+            return callback(null, true);
+        }
+        return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
 }));
-// Auth / session middleware commented out until ready
-/*
-app.use(
-  session({
+app.use((0, express_session_1.default)({
+    name: 'sid',
     resave: false,
-    secret: SESSION_SECRET,
     saveUninitialized: false,
+    secret: SESSION_SECRET,
     cookie: {
-      httpOnly: true,
-      secure: PRODUCTION,
-      sameSite: PRODUCTION ? "none" : "Lax",
-      maxAge: 60000 * 60,
+        httpOnly: true,
+        secure: isProduction,
+        sameSite: isProduction ? 'none' : 'lax',
+        maxAge: 1000 * 60 * 60,
     },
-    store: MongoStore.create({
-      client: mongoose.connection.getClient(),
+    store: connect_mongo_1.default.create({
+        mongoUrl: DB_URL,
+        stringify: false,
     }),
-  })
-);
-
-app.use(passport.initialize());
-app.use(passport.session());
-app.use(routes);
-*/
-// Minimal health route for quick testing
-app.get("/health", (_req, res) => {
-    res.json({ ok: true });
-});
+}));
+app.use(passport_1.default.initialize());
+app.use(passport_1.default.session());
 // Mount all API routes
-app.use(routes_1.default);
+app.use(index_1.default);
 app.listen(BACKEND_PORT, () => {
     console.log(`REST API listening on port ${BACKEND_PORT}`);
 });

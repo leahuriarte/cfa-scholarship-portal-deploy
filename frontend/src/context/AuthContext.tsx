@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080";
+const API_BASE = API_URL.replace(/\/$/, "");
 
 interface UserProfile {
   firstName: string;
@@ -38,6 +39,24 @@ interface RegisterData {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+function getErrorMessage(payload: any, fallback: string) {
+  if (payload?.message) return payload.message;
+  if (payload?.error) return payload.error;
+  if (Array.isArray(payload?.errors) && payload.errors.length > 0) {
+    return payload.errors[0]?.msg || fallback;
+  }
+  return fallback;
+}
+
+function getNetworkError(error: unknown, action: string) {
+  if (error instanceof TypeError) {
+    return new Error(
+      `Unable to ${action}. Cannot reach API at ${API_BASE}. Check backend server and CORS FRONTEND_ADDRESS.`
+    );
+  }
+  return error instanceof Error ? error : new Error(`Failed to ${action}`);
+}
+
 export function useAuth() {
   const ctx = useContext(AuthContext);
   if (!ctx) throw new Error("useAuth must be used within AuthProvider");
@@ -50,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkSession = useCallback(async () => {
     try {
-      const res = await fetch(`${API_URL}/users/status`, {
+      const res = await fetch(`${API_BASE}/users/status`, {
         credentials: "include",
       });
       if (res.ok) {
@@ -71,46 +90,54 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [checkSession]);
 
   const login = async (email: string, password: string) => {
-    const res = await fetch(`${API_URL}/users/login`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ email, password }),
-    });
-    if (!res.ok) {
-      const data = await res.json().catch(() => ({}));
-      throw new Error(data.message || data.error || "Login failed");
+    try {
+      const res = await fetch(`${API_BASE}/users/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ email, password }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(getErrorMessage(data, "Login failed"));
+      }
+      const data = await res.json();
+      setUser(data.user ?? data);
+    } catch (error) {
+      throw getNetworkError(error, "log in");
     }
-    const data = await res.json();
-    setUser(data.user ?? data);
   };
 
   const register = async (data: RegisterData) => {
-    const res = await fetch(`${API_URL}/users/register`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({
-        email: data.email,
-        password: data.password,
-        profile: {
-          firstName: data.firstName,
-          lastName: data.lastName,
-          phone: data.phone,
-          dateOfBirth: data.dateOfBirth,
-        },
-      }),
-    });
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({}));
-      throw new Error(err.message || err.error || "Registration failed");
+    try {
+      const res = await fetch(`${API_BASE}/users/register`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({
+          email: data.email,
+          password: data.password,
+          profile: {
+            firstName: data.firstName,
+            lastName: data.lastName,
+            phone: data.phone,
+            dateOfBirth: data.dateOfBirth,
+          },
+        }),
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(getErrorMessage(err, "Registration failed"));
+      }
+      // Auto-login after registration
+      await login(data.email, data.password);
+    } catch (error) {
+      throw getNetworkError(error, "register");
     }
-    // Auto-login after registration
-    await login(data.email, data.password);
   };
 
   const logout = async () => {
-    await fetch(`${API_URL}/users/logout`, {
+    await fetch(`${API_BASE}/users/logout`, {
       method: "POST",
       credentials: "include",
     });

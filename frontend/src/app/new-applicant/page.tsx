@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, ChangeEvent, FormEvent } from 'react';
+import Link from 'next/link';
 import { FileText, User, Briefcase, Home, Send, CheckCircle, AlertCircle } from 'lucide-react';
 import FileUpload from '@/components/FileUpload';
 import { useAuth } from '@/context/AuthContext';
@@ -418,16 +419,42 @@ const nextSection = (): void => {
 
   if (submitted) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-2xl p-12 max-w-2xl text-center">
-          <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-6" />
-          <h1 className="text-4xl font-bold text-gray-800 mb-4">Application Submitted!</h1>
-          <p className="text-lg text-gray-600 mb-6">
-            Thank you for applying to the Children's Foundation of America Scholarship. We have received your application and will review it shortly.
-          </p>
-          <p className="text-gray-600">
-            You will receive an email confirmation at <strong>{formData.email}</strong>
-          </p>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100">
+        <div className="bg-white shadow-lg">
+          <div className="max-w-5xl mx-auto px-6 py-8">
+            <div className="flex items-center gap-6">
+              <img
+                src="/Logo.png"
+                alt="Children's Foundation of America Logo"
+                className="h-16 w-16 object-contain flex-shrink-0"
+              />
+              <div>
+                <h1 className="text-3xl font-bold text-indigo-900 mb-2">
+                  Children's Foundation of America Scholarship
+                </h1>
+                <p className="text-gray-600">Scholarship Portal</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="max-w-3xl mx-auto p-4 sm:p-6 md:p-10">
+          <div className="bg-white rounded-2xl shadow-2xl p-8 md:p-12 text-center">
+            <CheckCircle className="w-24 h-24 text-green-500 mx-auto mb-6" />
+            <h1 className="text-4xl font-bold text-gray-800 mb-4">Application Submitted!</h1>
+            <p className="text-lg text-gray-600 mb-6">
+              Thank you for applying to the Children's Foundation of America Scholarship. We have received your application and will review it shortly.
+            </p>
+            <p className="text-gray-600 mb-8">
+              You will receive an email confirmation at <strong>{formData.email}</strong>
+            </p>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center px-6 py-3 bg-indigo-600 text-white rounded-lg font-semibold hover:bg-indigo-700 transition-colors"
+            >
+              Back to Home
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -611,7 +638,7 @@ const nextSection = (): void => {
                 {formData.hasDiploma === 'yes' && (
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      If Yes, from where?
+                      If Yes, from where?<span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -982,7 +1009,7 @@ const nextSection = (): void => {
                 {formData.continueLiving === 'no' && (
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      If No, what are your plans for the near future in regards to a living situation?
+                      If No, what are your plans for the near future in regards to a living situation?<span className="text-red-500">*</span>
                     </label>
                     <textarea
                       name="futurePlans"

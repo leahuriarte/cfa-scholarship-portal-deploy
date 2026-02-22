@@ -11,12 +11,17 @@ import passport from 'passport';
 const {
   BACKEND_PORT = '8080',
   FRONTEND_ADDRESS = 'http://localhost:3000',
+  FRONTEND_ADDRESSES = '',
   SESSION_SECRET = 'replace-me',
   PRODUCTION_STR = 'false',
   DB_URL = 'mongodb://db:27017/cfa',
 } = process.env;
 
 const isProduction = PRODUCTION_STR === 'true';
+const configuredOrigins = [FRONTEND_ADDRESS, ...FRONTEND_ADDRESSES.split(',')]
+  .map((origin) => origin.trim())
+  .filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins);
 
 const app = express();
 
@@ -33,7 +38,17 @@ app.use(express.json());
 
 app.use(
   cors({
-    origin: FRONTEND_ADDRESS,
+    origin: (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (allowedOrigins.has(origin)) return callback(null, true);
+
+      // In local development, allow frontend running on an alternate localhost port (e.g. 3001).
+      if (!isProduction && /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)) {
+        return callback(null, true);
+      }
+
+      return callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
     credentials: true,
   })
 );

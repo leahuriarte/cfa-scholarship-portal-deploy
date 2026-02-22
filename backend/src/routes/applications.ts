@@ -219,4 +219,42 @@ router.post("/:id/notes", async (req: Request, res: Response) => {
   }
 });
 
+// DELETE /api/applications/:id/notes/:noteId - Delete admin note from application
+// Accessible to: admin only
+router.delete("/:id/notes/:noteId", async (req: Request, res: Response) => {
+  try {
+    const { id, noteId } = req.params;
+
+    const application = await Application.findOneAndUpdate(
+      { _id: id, "adminNotes._id": noteId },
+      {
+        $pull: {
+          adminNotes: { _id: noteId },
+        },
+      },
+      { new: true }
+    );
+
+    if (!application) {
+      return res.status(404).json({
+        success: false,
+        message: "Application or note not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Note deleted successfully",
+      application,
+    });
+  } catch (error: any) {
+    console.error("Error deleting note:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to delete note",
+      error: error.message,
+    });
+  }
+});
+
 export default router;

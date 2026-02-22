@@ -33,6 +33,7 @@ router.post("/", async (req, res) => {
     }
 });
 // GET /api/reimbursements - Get all reimbursement requests (with filters)
+// Accessible to: admin
 router.get("/", async (req, res) => {
     try {
         const { userId, applicationId, status, requestType, limit = 50, skip = 0, } = req.query;
@@ -71,6 +72,7 @@ router.get("/", async (req, res) => {
     }
 });
 // GET /api/reimbursements/:id - Get a specific reimbursement request
+// Accessible to: owner or admin
 router.get("/:id", async (req, res) => {
     try {
         const reimbursement = await ReimbursementRequest_1.default.findById(req.params.id)
@@ -98,6 +100,7 @@ router.get("/:id", async (req, res) => {
     }
 });
 // PATCH /api/reimbursements/:id/status - Update reimbursement status (admin)
+// Accessible to: admin only
 router.patch("/:id/status", async (req, res) => {
     try {
         const { status, reviewedBy, adminNotes, paidAt } = req.body;
