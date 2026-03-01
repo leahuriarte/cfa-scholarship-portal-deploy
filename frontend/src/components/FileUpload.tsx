@@ -88,7 +88,7 @@ export default function FileUpload({
       });
 
       // Upload to backend
-      const response = await fetch('http://localhost:8080/api/files/upload', {
+      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/files/upload`, {
         method: 'POST',
         credentials: 'include',
         body: formData,

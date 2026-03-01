@@ -45,7 +45,7 @@ services:
     working_dir: /srv/cfa-scholarship-portal/backend
     command: ["yarn", "dev"]
     environment:
-      DB_URL: mongodb://cfa-scholarship-portal:local_dev@db
+      DB_URL: ${DB_URL}
     volumes:
       - ./backend:/srv/cfa-scholarship-portal/backend
       - ./yarn.lock:/srv/cfa-scholarship-portal/yarn.lock
