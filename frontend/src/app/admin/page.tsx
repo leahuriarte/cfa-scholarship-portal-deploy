@@ -291,6 +291,28 @@ function ApplicationDetail({ app, onStatusChange, onNoteAdded, onNoteDeleted }: 
   const [noteLoading, setNoteLoading] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<string | null>(null);
   const [statusLoading, setStatusLoading] = useState('');
+  const [appFiles, setAppFiles] = useState<Array<{ id: string; originalName: string; documentType: string; mimeType: string }>>([]);
+  const [viewingFileId, setViewingFileId] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/files/entity/application/${app._id}`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => setAppFiles(data.files ?? []))
+      .catch(() => {});
+  }, [app._id]);
+
+  const handleViewFile = async (fileId: string) => {
+    setViewingFileId(fileId);
+    try {
+      const res = await fetch(`${API_BASE}/api/files/${fileId}/presigned-url`, { credentials: 'include' });
+      const data = await res.json();
+      if (data.url) window.open(data.url, '_blank');
+    } catch {
+      // ignore
+    } finally {
+      setViewingFileId(null);
+    }
+  };
 
   const handleStatusChange = async (newStatus: AppStatus) => {
     setStatusLoading(newStatus);
@@ -475,7 +497,7 @@ function ApplicationDetail({ app, onStatusChange, onNoteAdded, onNoteDeleted }: 
       {/* Documents */}
       <div>
         <SectionHeader icon={ClipboardList} title="Documents" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 mb-4">
           {[
             { label: 'HS Diploma/GED', data: app.requiredDocuments.highSchoolDiplomaOrGED },
             { label: 'Transcripts', data: app.requiredDocuments.transcripts },
@@ -503,6 +525,27 @@ function ApplicationDetail({ app, onStatusChange, onNoteAdded, onNoteDeleted }: 
             <span className="text-gray-700">Recommendation Letter</span>
           </div>
         </div>
+        {appFiles.length > 0 && (
+          <div className="mt-3 space-y-2">
+            <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Uploaded Files</p>
+            {appFiles.map(file => (
+              <div key={file.id} className="flex items-center justify-between bg-gray-50 rounded-lg px-3 py-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                  <span className="text-sm text-gray-700 truncate">{file.originalName}</span>
+                  <span className="text-xs text-gray-400 flex-shrink-0">{file.documentType}</span>
+                </div>
+                <button
+                  onClick={() => handleViewFile(file.id)}
+                  disabled={viewingFileId === file.id}
+                  className="ml-3 text-xs text-indigo-600 hover:text-indigo-800 font-medium flex-shrink-0 disabled:opacity-50"
+                >
+                  {viewingFileId === file.id ? 'Opening...' : 'View'}
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Admin Notes */}

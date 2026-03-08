@@ -1,9 +1,12 @@
 import { Router, Request, Response } from "express";
 import multer from "multer";
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 import { uploadFileToS3, deleteFileFromS3, validateFile } from "../utils/s3Upload";
+import { s3Client, S3_BUCKET_NAME } from "../utils/s3Client";
 import File from "../models/File";
 import mongoose from "mongoose";
-import { requireOwnershipOrAdmin } from '../middleware/auth';
+import { requireOwnershipOrAdmin, requireAdmin } from '../middleware/auth';
 
 const router = Router();
 
@@ -137,6 +140,37 @@ router.get("/:fileId", requireOwnershipOrAdmin('userId'), async (req: Request, r
   } catch (error) {
     console.error("Error fetching file:", error);
     return res.status(500).json({ error: "Failed to fetch file" });
+  }
+});
+
+/**
+ * GET /api/files/:fileId/presigned-url
+ * Generate a short-lived presigned URL for viewing a file
+ * Accessible to: owner or admin
+ */
+router.get("/:fileId/presigned-url", requireAdmin, async (req: Request, res: Response) => {
+  try {
+    const { fileId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(fileId)) {
+      return res.status(400).json({ error: "Invalid file ID" });
+    }
+
+    const file = await File.findOne({ _id: fileId, isDeleted: false });
+    if (!file) {
+      return res.status(404).json({ error: "File not found" });
+    }
+
+    const url = new URL(file.fileMetadata.storageUrl);
+    const key = url.pathname.substring(1);
+
+    const command = new GetObjectCommand({ Bucket: S3_BUCKET_NAME, Key: key });
+    const presignedUrl = await getSignedUrl(s3Client, command, { expiresIn: 3600 });
+
+    return res.json({ url: presignedUrl });
+  } catch (error) {
+    console.error("Error generating presigned URL:", error);
+    return res.status(500).json({ error: "Failed to generate presigned URL" });
   }
 });
 
