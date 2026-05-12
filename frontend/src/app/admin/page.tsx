@@ -1132,7 +1132,7 @@ export default function AdminPage() {
         return (
           <div className="p-12 text-center text-gray-400">
             <Users className="w-8 h-8 mx-auto mb-3" />
-            <p>No students found.</p>
+            <p>No new applications found.</p>
           </div>
         );
       }
@@ -1352,7 +1352,7 @@ export default function AdminPage() {
               </Link>
               <div>
                 <h1 className="text-2xl font-bold text-indigo-900">Admin Dashboard</h1>
-                <p className="text-sm text-gray-500">Review applications, checklists, acceptances, and reimbursements</p>
+                <p className="text-sm text-gray-500">Review new applications, renewal checklists, scholarship acceptances, and reimbursements</p>
               </div>
             </div>
             {tab !== 'settings' && (
@@ -1373,9 +1373,9 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex gap-1 bg-white rounded-lg shadow-md p-1 mb-6">
           {([
-            { key: 'students' as TabType, label: 'Students', icon: Users },
-            { key: 'checklists' as TabType, label: 'Checklists', icon: StickyNote },
-            { key: 'acceptance' as TabType, label: 'Acceptances', icon: Award },
+            { key: 'students' as TabType, label: 'New Applications', icon: Users },
+            { key: 'checklists' as TabType, label: 'Renewal Checklists', icon: StickyNote },
+            { key: 'acceptance' as TabType, label: 'Scholarship Acceptances', icon: Award },
             { key: 'reimbursements' as TabType, label: 'Reimbursements', icon: DollarSign },
             { key: 'settings' as TabType, label: 'Settings', icon: Settings },
           ]).map(({ key, label, icon: Icon }) => (

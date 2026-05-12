@@ -77,6 +77,10 @@ export default function Home() {
     };
   }, [loading, user, isAdmin]);
 
+  const hasApprovedNew = applications.some(
+    app => app.status === 'approved' && app.applicationType === 'new'
+  );
+
   if (loading || !user) return null;
 
   return (
@@ -177,43 +181,47 @@ export default function Home() {
             </div>
           </Link>
 
-          {/* Acceptance Card */}
-          <Link href="/acceptance">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer group h-full flex flex-col">
-              <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-6 group-hover:bg-green-200 transition-colors">
-                <Award className="w-8 h-8 text-green-600" />
+          {/* Acceptance Card — only visible after an application is approved */}
+          {(isAdmin || hasApprovedNew) && (
+            <Link href="/acceptance">
+              <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer group h-full flex flex-col">
+                <div className="flex items-center justify-center w-16 h-16 bg-green-100 rounded-full mb-6 group-hover:bg-green-200 transition-colors">
+                  <Award className="w-8 h-8 text-green-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">
+                  Accept Award
+                </h3>
+                <p className="text-gray-600 mb-6 flex-grow">
+                  Congratulations! If you've been awarded a scholarship, complete this form to accept your award and request disbursement.
+                </p>
+                <div className="flex items-center text-green-600 font-semibold group-hover:text-green-700">
+                  Accept Scholarship
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-3">
-                Accept Award
-              </h3>
-              <p className="text-gray-600 mb-6 flex-grow">
-                Congratulations! If you've been awarded a scholarship, complete this form to accept your award and request disbursement.
-              </p>
-              <div className="flex items-center text-green-600 font-semibold group-hover:text-green-700">
-                Accept Scholarship
-                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
+            </Link>
+          )}
 
-          {/* Renewal Card */}
-          <Link href="/renewal">
-            <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer group h-full flex flex-col">
-              <div className="flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-6 group-hover:bg-purple-200 transition-colors">
-                <RefreshCw className="w-8 h-8 text-purple-600" />
+          {/* Renewal Card — only visible after an application is approved */}
+          {(isAdmin || hasApprovedNew) && (
+            <Link href="/renewal">
+              <div className="bg-white rounded-xl shadow-lg p-8 hover:shadow-2xl transition-shadow cursor-pointer group h-full flex flex-col">
+                <div className="flex items-center justify-center w-16 h-16 bg-purple-100 rounded-full mb-6 group-hover:bg-purple-200 transition-colors">
+                  <RefreshCw className="w-8 h-8 text-purple-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-gray-800 mb-3">
+                  Renewal Application
+                </h3>
+                <p className="text-gray-600 mb-6 flex-grow">
+                  Current scholarship recipients can apply to renew their award for the upcoming academic year through this form.
+                </p>
+                <div className="flex items-center text-purple-600 font-semibold group-hover:text-purple-700">
+                  Renew Scholarship
+                  <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
+                </div>
               </div>
-              <h3 className="text-2xl font-bold text-gray-800 mb-3">
-                Renewal Application
-              </h3>
-              <p className="text-gray-600 mb-6 flex-grow">
-                Current scholarship recipients can apply to renew their award for the upcoming academic year through this form.
-              </p>
-              <div className="flex items-center text-purple-600 font-semibold group-hover:text-purple-700">
-                Renew Scholarship
-                <ArrowRight className="w-5 h-5 ml-2 group-hover:translate-x-1 transition-transform" />
-              </div>
-            </div>
-          </Link>
+            </Link>
+          )}
         </div>
 
         {/* Information Section */}
