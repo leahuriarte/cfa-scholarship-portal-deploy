@@ -16,7 +16,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 type AppStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'denied';
 type ChecklistStatus = 'pending' | 'submitted' | 'reviewed';
 type ReimbursementStatus = 'pending' | 'approved' | 'denied' | 'paid';
-type TabType = 'students' | 'checklists' | 'acceptance' | 'reimbursements' | 'settings';
+type TabType = 'students' | 'people' | 'checklists' | 'acceptance' | 'reimbursements' | 'settings';
 
 interface Application {
   _id: string;
@@ -133,12 +133,26 @@ interface RenewalChecklist {
 
 interface AcceptanceFormData {
   _id: string;
-  userId: any;
-  applicationId: any;
+  userId: { _id: string; email: string; profile?: { firstName?: string; lastName?: string } } | null;
+  applicationId: Application | null;
   acceptedTerms: boolean;
   acceptedAt: string;
   ipAddress: string;
   createdAt: string;
+}
+
+interface AdminUser {
+  _id: string;
+  email: string;
+  role: string;
+  profile: {
+    firstName?: string;
+    lastName?: string;
+    phone?: string;
+    dateOfBirth?: string;
+  };
+  createdAt: string;
+  updatedAt: string;
 }
 
 interface ReimbursementRequest {
@@ -639,17 +653,42 @@ function ChecklistDetail({ checklist }: { checklist: RenewalChecklist }) {
 // --- Acceptance Form Detail ---
 
 function AcceptanceFormDetail({ form }: { form: AcceptanceFormData }) {
+  const userName = form.userId
+    ? [form.userId.profile?.firstName, form.userId.profile?.lastName].filter(Boolean).join(' ') || form.userId.email
+    : null;
+  const app = form.applicationId;
+
   return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-      <SectionHeader icon={Award} title="Acceptance Details" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-        <DetailRow label="Accepted Terms" value={form.acceptedTerms} />
-        <DetailRow label="Accepted At" value={formatDate(form.acceptedAt)} />
-        <DetailRow label="IP Address" value={form.ipAddress} />
-        <DetailRow label="Application ID" value={typeof form.applicationId === 'string' ? form.applicationId : form.applicationId?._id || '—'} />
-        <DetailRow label="User ID" value={typeof form.userId === 'string' ? form.userId : form.userId?._id || '—'} />
-        <DetailRow label="Created" value={formatDate(form.createdAt)} />
+    <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
+      <div>
+        <SectionHeader icon={Award} title="Acceptance Details" />
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+          <DetailRow label="Accepted Terms" value={form.acceptedTerms} />
+          <DetailRow label="Accepted At" value={formatDate(form.acceptedAt)} />
+        </div>
       </div>
+      {(userName || form.userId?.email) && (
+        <div>
+          <SectionHeader icon={User} title="Student" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            {userName && <DetailRow label="Name" value={userName} />}
+            <DetailRow label="Email" value={form.userId?.email} />
+          </div>
+        </div>
+      )}
+      {app && (
+        <div>
+          <SectionHeader icon={GraduationCap} title="Application" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <DetailRow label="Type" value={app.applicationType === 'new' ? 'New Application' : 'Renewal'} />
+            <DetailRow label="Academic Year" value={app.academicYear} />
+            <DetailRow label="College" value={app.educationInfo?.collegeName} />
+            <DetailRow label="Status" value={<StatusBadge status={app.status} />} />
+            <DetailRow label="Name on Application" value={app.personalInfo?.fullName} />
+            <DetailRow label="Email on Application" value={app.personalInfo?.email} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -869,6 +908,234 @@ function StudentCard({ student, onStatusChange, onNoteAdded, onNoteDeleted }: {
   );
 }
 
+// --- Person Card (accounts view) ---
+
+function PersonCard({ user }: { user: AdminUser }) {
+  const [isOpen, setIsOpen] = useState(false);
+  const [loadingData, setLoadingData] = useState(false);
+  const [fetched, setFetched] = useState(false);
+  const [userApplications, setUserApplications] = useState<Application[]>([]);
+  const [userChecklists, setUserChecklists] = useState<RenewalChecklist[]>([]);
+  const [userForms, setUserForms] = useState<AcceptanceFormData[]>([]);
+  const [expandedItemId, setExpandedItemId] = useState<string | null>(null);
+
+  const fetchUserData = async () => {
+    setLoadingData(true);
+    try {
+      const [appsRes, checklistsRes, formsRes] = await Promise.all([
+        fetch(`${API_BASE}/api/applications?userId=${user._id}`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/renewal-checklists?userId=${user._id}`, { credentials: 'include' }),
+        fetch(`${API_BASE}/api/acceptance-forms?userId=${user._id}`, { credentials: 'include' }),
+      ]);
+      const [appsData, checklistsData, formsData] = await Promise.all([
+        appsRes.json(), checklistsRes.json(), formsRes.json(),
+      ]);
+      if (appsData.success) setUserApplications(appsData.applications);
+      if (checklistsData.success) setUserChecklists(checklistsData.checklists);
+      if (formsData.success) setUserForms(formsData.forms);
+      setFetched(true);
+    } catch (err) {
+      console.error('Failed to fetch user data:', err);
+    } finally {
+      setLoadingData(false);
+    }
+  };
+
+  const handleToggle = () => {
+    const willOpen = !isOpen;
+    setIsOpen(willOpen);
+    if (willOpen && !fetched) fetchUserData();
+    if (!willOpen) setExpandedItemId(null);
+  };
+
+  const handleStatusChange = (id: string, newStatus: AppStatus) => {
+    setUserApplications(prev => prev.map(a => a._id === id ? { ...a, status: newStatus } : a));
+  };
+
+  const handleNoteAdded = (id: string, note: Application['adminNotes'][number]) => {
+    setUserApplications(prev => prev.map(a => a._id === id ? { ...a, adminNotes: [...a.adminNotes, note] } : a));
+  };
+
+  const handleNoteDeleted = (id: string, noteId: string) => {
+    setUserApplications(prev => prev.map(a => a._id === id ? { ...a, adminNotes: a.adminNotes.filter(n => n._id !== noteId) } : a));
+  };
+
+  const fullName = [user.profile?.firstName, user.profile?.lastName].filter(Boolean).join(' ') || user.email;
+  const totalSubmissions = userApplications.length + userChecklists.length + userForms.length;
+
+  return (
+    <div className="border-b border-gray-100 last:border-b-0">
+      <button
+        onClick={handleToggle}
+        className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left"
+      >
+        <div className="flex items-center gap-4 flex-1 min-w-0">
+          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-purple-100 text-purple-600 flex-shrink-0">
+            <User className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="font-semibold text-gray-900">{fullName}</span>
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${user.role === 'admin' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'}`}>
+                {user.role}
+              </span>
+              {fetched && totalSubmissions > 0 && (
+                <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {totalSubmissions} {totalSubmissions === 1 ? 'submission' : 'submissions'}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+              <span>{user.email}</span>
+              <span>Joined {formatDate(user.createdAt)}</span>
+            </div>
+          </div>
+        </div>
+        {isOpen ? <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+      </button>
+
+      {isOpen && (
+        <div className="px-6 pb-4 space-y-4">
+          {loadingData ? (
+            <div className="py-6 text-center text-gray-400">
+              <RefreshCw className="w-5 h-5 animate-spin mx-auto mb-2" />
+              <p className="text-sm">Loading submissions...</p>
+            </div>
+          ) : (
+            <>
+              {userApplications.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Applications ({userApplications.length})
+                  </p>
+                  <div className="space-y-2">
+                    {userApplications.map((app) => {
+                      const isExpanded = expandedItemId === app._id;
+                      return (
+                        <div key={app._id}>
+                          <button
+                            onClick={() => setExpandedItemId(isExpanded ? null : app._id)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-3 flex-1 min-w-0">
+                              <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <TypeBadge type={app.applicationType} />
+                                <StatusBadge status={app.status} />
+                                <span className="text-sm text-gray-600">{app.academicYear}</span>
+                                <span className="text-sm text-gray-400">{app.educationInfo.collegeName}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">{formatDate(app.submittedAt || app.createdAt)}</span>
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-2 ml-4">
+                              <ApplicationDetail
+                                app={app}
+                                onStatusChange={handleStatusChange}
+                                onNoteAdded={handleNoteAdded}
+                                onNoteDeleted={handleNoteDeleted}
+                              />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {userChecklists.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Renewal Checklists ({userChecklists.length})
+                  </p>
+                  <div className="space-y-2">
+                    {userChecklists.map((cl) => {
+                      const isExpanded = expandedItemId === cl._id;
+                      return (
+                        <div key={cl._id}>
+                          <button
+                            onClick={() => setExpandedItemId(isExpanded ? null : cl._id)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <StickyNote className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              <StatusBadge status={cl.status} />
+                              <span className="text-sm text-gray-600">{cl.academicYear} — {cl.reportingPeriod}</span>
+                              <span className="text-sm text-gray-400">GPA: {cl.academicUpdate.currentGPA}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">{formatDate(cl.submittedAt || cl.createdAt)}</span>
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-2 ml-4">
+                              <ChecklistDetail checklist={cl} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {userForms.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                    Scholarship Acceptances ({userForms.length})
+                  </p>
+                  <div className="space-y-2">
+                    {userForms.map((form) => {
+                      const isExpanded = expandedItemId === form._id;
+                      return (
+                        <div key={form._id}>
+                          <button
+                            onClick={() => setExpandedItemId(isExpanded ? null : form._id)}
+                            className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors text-left"
+                          >
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <Award className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${form.acceptedTerms ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                                {form.acceptedTerms ? 'Accepted' : 'Not Accepted'}
+                              </span>
+                              {form.applicationId && (
+                                <span className="text-sm text-gray-400">{form.applicationId.educationInfo?.collegeName}</span>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs text-gray-400">{formatDate(form.acceptedAt)}</span>
+                              {isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                            </div>
+                          </button>
+                          {isExpanded && (
+                            <div className="mt-2 ml-4">
+                              <AcceptanceFormDetail form={form} />
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              {fetched && totalSubmissions === 0 && (
+                <p className="text-sm text-gray-400 py-4 text-center">No submissions found for this account.</p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // --- Group applications by student email ---
 
 function groupByStudent(applications: Application[]): StudentGroup[] {
@@ -905,6 +1172,7 @@ export default function AdminPage() {
   const [checklists, setChecklists] = useState<RenewalChecklist[]>([]);
   const [acceptanceForms, setAcceptanceForms] = useState<AcceptanceFormData[]>([]);
   const [reimbursements, setReimbursements] = useState<ReimbursementRequest[]>([]);
+  const [users, setUsers] = useState<AdminUser[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -973,6 +1241,16 @@ export default function AdminPage() {
     }
   };
 
+  const fetchUsers = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/admin/users`, { credentials: 'include' });
+      const data = await res.json();
+      if (Array.isArray(data)) setUsers(data);
+    } catch (err) {
+      console.error('Failed to fetch users:', err);
+    }
+  };
+
   const fetchReimbursements = async () => {
     try {
       const params = new URLSearchParams();
@@ -989,6 +1267,7 @@ export default function AdminPage() {
     if (tab === 'settings') return;
     setLoading(true);
     if (tab === 'students') await fetchApplications();
+    else if (tab === 'people') await fetchUsers();
     else if (tab === 'checklists') await fetchChecklists();
     else if (tab === 'acceptance') await fetchAcceptanceForms();
     else if (tab === 'reimbursements') await fetchReimbursements();
@@ -1127,6 +1406,32 @@ export default function AdminPage() {
       );
     }
 
+    if (tab === 'people') {
+      if (users.length === 0) {
+        return (
+          <div className="p-12 text-center text-gray-400">
+            <Users className="w-8 h-8 mx-auto mb-3" />
+            <p>No accounts found.</p>
+          </div>
+        );
+      }
+      const sortedUsers = [...users].sort((a, b) => a.role === 'admin' ? 1 : b.role === 'admin' ? -1 : 0);
+      const studentCount = users.filter(u => u.role !== 'admin').length;
+      const adminCount = users.filter(u => u.role === 'admin').length;
+      return (
+        <div>
+          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+            <span className="text-sm font-medium text-gray-600">
+              {studentCount} {studentCount === 1 ? 'student' : 'students'}, {adminCount} {adminCount === 1 ? 'admin' : 'admins'}
+            </span>
+          </div>
+          {sortedUsers.map((u) => (
+            <PersonCard key={u._id} user={u} />
+          ))}
+        </div>
+      );
+    }
+
     if (tab === 'students') {
       if (students.length === 0) {
         return (
@@ -1223,19 +1528,29 @@ export default function AdminPage() {
         <div>
           {acceptanceForms.map((form) => {
             const isExpanded = expandedId === form._id;
+            const formUserName = form.userId
+              ? [form.userId.profile?.firstName, form.userId.profile?.lastName].filter(Boolean).join(' ') || form.userId.email
+              : null;
+            const formApp = form.applicationId;
             return (
               <div key={form._id} className="border-b border-gray-100 last:border-b-0">
                 <button onClick={() => setExpandedId(isExpanded ? null : form._id)} className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-gray-900">Acceptance Form</span>
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${form.acceptedTerms ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                        {form.acceptedTerms ? 'Accepted' : 'Not Accepted'}
-                      </span>
+                  <div className="flex items-center gap-4 flex-1 min-w-0">
+                    <div className="flex items-center justify-center w-10 h-10 rounded-full bg-green-100 text-green-600 flex-shrink-0">
+                      <Award className="w-5 h-5" />
                     </div>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-                      <span>Accepted: {formatDate(form.acceptedAt)}</span>
-                      <span>IP: {form.ipAddress}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-semibold text-gray-900">{formUserName || 'Unknown Student'}</span>
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${form.acceptedTerms ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                          {form.acceptedTerms ? 'Accepted' : 'Not Accepted'}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                        {form.userId?.email && <span>{form.userId.email}</span>}
+                        {formApp && <span>{formApp.educationInfo?.collegeName}</span>}
+                        <span>Accepted: {formatDate(form.acceptedAt)}</span>
+                      </div>
                     </div>
                   </div>
                   {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
@@ -1373,6 +1688,7 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex gap-1 bg-white rounded-lg shadow-md p-1 mb-6">
           {([
+            { key: 'people' as TabType, label: 'Accounts', icon: User },
             { key: 'students' as TabType, label: 'New Applications', icon: Users },
             { key: 'checklists' as TabType, label: 'Renewal Checklists', icon: StickyNote },
             { key: 'acceptance' as TabType, label: 'Scholarship Acceptances', icon: Award },
