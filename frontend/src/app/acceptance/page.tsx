@@ -22,12 +22,26 @@ interface FormData {
 export default function ScholarshipAcceptance(): React.ReactElement {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const [approvedApplicationId, setApprovedApplicationId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!loading && !user) {
       router.push('/login');
     }
   }, [loading, user, router]);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch(`${API_BASE}/api/applications/mine`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.applications)) {
+          const approved = data.applications.find((a: { status: string }) => a.status === 'approved');
+          if (approved) setApprovedApplicationId(approved._id);
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
   const [formData, setFormData] = useState<FormData>({
     fullName: '',
@@ -65,6 +79,8 @@ export default function ScholarshipAcceptance(): React.ReactElement {
         body: JSON.stringify({
           ...formData,
           acceptedTerms: formData.agreedToTerms === 'yes',
+          userId: user?._id,
+          ...(approvedApplicationId ? { applicationId: approvedApplicationId } : {}),
         }),
       });
 

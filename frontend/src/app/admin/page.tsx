@@ -15,8 +15,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080';
 
 type AppStatus = 'draft' | 'submitted' | 'under_review' | 'approved' | 'denied';
 type ChecklistStatus = 'pending' | 'submitted' | 'reviewed';
-type ReimbursementStatus = 'pending' | 'approved' | 'denied' | 'paid';
-type TabType = 'students' | 'checklists' | 'acceptance' | 'reimbursements' | 'settings';
+type TabType = 'students' | 'new-applications' | 'checklists' | 'acceptance' | 'settings';
 
 interface Application {
   _id: string;
@@ -138,36 +137,14 @@ interface AcceptanceFormData {
   acceptedTerms: boolean;
   acceptedAt: string;
   ipAddress: string;
+  fullName?: string;
+  companyName?: string;
+  companyAddress?: string;
+  companyPhone?: string;
+  requestAmount?: string;
+  cardLastFour?: string;
+  formPurpose?: string;
   createdAt: string;
-}
-
-interface ReimbursementRequest {
-  _id: string;
-  userId: any;
-  applicationId: any;
-  requestType: 'tuition_payment' | 'reimbursement';
-  amount: number;
-  description: string;
-  paymentInfo: {
-    payableTo: string;
-    paymentMethod: string;
-    accountOrAddress: string;
-  };
-  receipts: Array<{
-    description: string;
-    amount: number;
-    date: string;
-    fileId: string;
-    category: string;
-  }>;
-  status: ReimbursementStatus;
-  submittedAt?: string;
-  reviewedBy?: any;
-  reviewedAt?: string;
-  paidAt?: string;
-  adminNotes?: string;
-  createdAt: string;
-  updatedAt: string;
 }
 
 interface StudentGroup {
@@ -176,6 +153,8 @@ interface StudentGroup {
   college: string;
   phone: string;
   applications: Application[];
+  acceptanceForms: AcceptanceFormData[];
+  checklists: RenewalChecklist[];
 }
 
 const statusColors: Record<string, string> = {
@@ -213,15 +192,6 @@ function TypeBadge({ type }: { type: string }) {
   return (
     <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isNew ? 'bg-indigo-100 text-indigo-700' : 'bg-purple-100 text-purple-700'}`}>
       {isNew ? 'New' : 'Renewal'}
-    </span>
-  );
-}
-
-function RequestTypeBadge({ type }: { type: string }) {
-  const isTuition = type === 'tuition_payment';
-  return (
-    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${isTuition ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'}`}>
-      {isTuition ? 'Tuition Payment' : 'Reimbursement'}
     </span>
   );
 }
@@ -639,140 +609,49 @@ function ChecklistDetail({ checklist }: { checklist: RenewalChecklist }) {
 // --- Acceptance Form Detail ---
 
 function AcceptanceFormDetail({ form }: { form: AcceptanceFormData }) {
-  return (
-    <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-4">
-      <SectionHeader icon={Award} title="Acceptance Details" />
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-        <DetailRow label="Accepted Terms" value={form.acceptedTerms} />
-        <DetailRow label="Accepted At" value={formatDate(form.acceptedAt)} />
-        <DetailRow label="IP Address" value={form.ipAddress} />
-        <DetailRow label="Application ID" value={typeof form.applicationId === 'string' ? form.applicationId : form.applicationId?._id || '—'} />
-        <DetailRow label="User ID" value={typeof form.userId === 'string' ? form.userId : form.userId?._id || '—'} />
-        <DetailRow label="Created" value={formatDate(form.createdAt)} />
-      </div>
-    </div>
-  );
-}
+  const studentName =
+    (typeof form.applicationId === 'object' ? form.applicationId?.personalInfo?.fullName : null)
+    || form.fullName
+    || (typeof form.userId === 'object' ? [form.userId?.profile?.firstName, form.userId?.profile?.lastName].filter(Boolean).join(' ') : null)
+    || null;
 
-// --- Reimbursement Detail ---
-
-function ReimbursementDetail({ reimbursement, onStatusChange }: {
-  reimbursement: ReimbursementRequest;
-  onStatusChange: (id: string, status: ReimbursementStatus) => void;
-}) {
-  const [statusLoading, setStatusLoading] = useState('');
-
-  const handleStatusChange = async (newStatus: ReimbursementStatus) => {
-    setStatusLoading(newStatus);
-    try {
-      const res = await fetch(`${API_BASE}/api/reimbursements/${reimbursement._id}/status`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        credentials: 'include',
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const data = await res.json();
-      if (data.success) {
-        onStatusChange(reimbursement._id, newStatus);
-      }
-    } catch (err) {
-      console.error('Failed to update reimbursement status:', err);
-    } finally {
-      setStatusLoading('');
-    }
-  };
+  const studentEmail =
+    (typeof form.applicationId === 'object' ? form.applicationId?.personalInfo?.email : null)
+    || (typeof form.userId === 'object' ? form.userId?.email : null)
+    || null;
 
   return (
     <div className="bg-white border border-gray-200 rounded-lg p-6 space-y-6">
-      {/* Status Actions */}
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="text-sm font-medium text-gray-700">Set Status:</span>
-        {(['pending', 'approved', 'denied', 'paid'] as ReimbursementStatus[]).map((s) => {
-          const icons: Record<string, React.ReactNode> = {
-            pending: <Clock className="w-3.5 h-3.5" />,
-            approved: <CheckCircle className="w-3.5 h-3.5" />,
-            denied: <XCircle className="w-3.5 h-3.5" />,
-            paid: <DollarSign className="w-3.5 h-3.5" />,
-          };
-          const colors: Record<string, string> = {
-            pending: 'bg-gray-600 hover:bg-gray-700',
-            approved: 'bg-green-600 hover:bg-green-700',
-            denied: 'bg-red-600 hover:bg-red-700',
-            paid: 'bg-emerald-600 hover:bg-emerald-700',
-          };
-          const isActive = reimbursement.status === s;
-          return (
-            <button
-              key={s}
-              onClick={() => handleStatusChange(s)}
-              disabled={isActive || statusLoading !== ''}
-              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-white transition-colors ${
-                isActive ? 'opacity-50 cursor-not-allowed ' + colors[s] : colors[s]
-              } ${statusLoading === s ? 'opacity-70' : ''}`}
-            >
-              {icons[s]}
-              {statusLoading === s ? 'Updating...' : statusLabels[s]}
-            </button>
-          );
-        })}
-      </div>
-
-      {/* Request Info */}
       <div>
-        <SectionHeader icon={DollarSign} title="Request Details" />
+        <SectionHeader icon={Award} title="Acceptance Details" />
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-          <DetailRow label="Type" value={reimbursement.requestType === 'tuition_payment' ? 'Tuition Payment' : 'Reimbursement'} />
-          <DetailRow label="Amount" value={formatCurrency(reimbursement.amount)} />
-          <DetailRow label="Description" value={reimbursement.description} />
-          <DetailRow label="Submitted" value={formatDate(reimbursement.submittedAt)} />
-          <DetailRow label="Reviewed" value={formatDate(reimbursement.reviewedAt)} />
-          <DetailRow label="Paid" value={formatDate(reimbursement.paidAt)} />
+          {studentName && <DetailRow label="Student Name" value={studentName} />}
+          {studentEmail && <DetailRow label="Student Email" value={studentEmail} />}
+          <DetailRow label="Accepted Terms" value={form.acceptedTerms} />
+          <DetailRow label="Accepted At" value={formatDate(form.acceptedAt)} />
+          <DetailRow label="IP Address" value={form.ipAddress} />
+          <DetailRow label="Submitted" value={formatDate(form.createdAt)} />
         </div>
       </div>
-
-      {/* Payment Info */}
-      <div>
-        <SectionHeader icon={Briefcase} title="Payment Information" />
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
-          <DetailRow label="Payable To" value={reimbursement.paymentInfo.payableTo} />
-          <DetailRow label="Payment Method" value={reimbursement.paymentInfo.paymentMethod} />
-          <DetailRow label="Account/Address" value={reimbursement.paymentInfo.accountOrAddress} />
-        </div>
-      </div>
-
-      {/* Receipts */}
-      {reimbursement.receipts && reimbursement.receipts.length > 0 && (
+      {(form.companyName || form.requestAmount || form.cardLastFour || form.formPurpose) && (
         <div>
-          <SectionHeader icon={FileText} title="Receipts" />
-          <div className="space-y-2">
-            {reimbursement.receipts.map((r, i) => (
-              <div key={i} className="bg-gray-50 border border-gray-200 rounded-lg p-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-800">{r.description}</span>
-                  <span className="text-sm font-semibold text-gray-900">{formatCurrency(r.amount)}</span>
-                </div>
-                <div className="flex items-center gap-4 mt-1 text-xs text-gray-500">
-                  <span>{r.category}</span>
-                  <span>{formatDate(r.date)}</span>
-                </div>
-              </div>
-            ))}
+          <SectionHeader icon={DollarSign} title="Payment / Disbursement Request" />
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8">
+            <DetailRow label="Payable To (Name)" value={form.fullName} />
+            <DetailRow label="Company / Institution" value={form.companyName} />
+            <DetailRow label="Company Address" value={form.companyAddress} />
+            <DetailRow label="Company Phone" value={form.companyPhone} />
+            <DetailRow label="Request Amount" value={form.requestAmount} />
+            <DetailRow label="Card Last Four" value={form.cardLastFour} />
+            <DetailRow label="Purpose" value={form.formPurpose} />
           </div>
-        </div>
-      )}
-
-      {/* Admin Notes */}
-      {reimbursement.adminNotes && (
-        <div>
-          <SectionHeader icon={MessageSquare} title="Admin Notes" />
-          <p className="text-sm text-gray-800 bg-gray-50 border border-gray-200 rounded-lg p-3">{reimbursement.adminNotes}</p>
         </div>
       )}
     </div>
   );
 }
 
-// --- Student Card (groups applications by student) ---
+// --- Student Card (groups all records by student) ---
 
 function StudentCard({ student, onStatusChange, onNoteAdded, onNoteDeleted }: {
   student: StudentGroup;
@@ -782,16 +661,20 @@ function StudentCard({ student, onStatusChange, onNoteAdded, onNoteDeleted }: {
 }) {
   const [isOpen, setIsOpen] = useState(false);
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
+  const [expandedFormId, setExpandedFormId] = useState<string | null>(null);
+  const [expandedChecklistId, setExpandedChecklistId] = useState<string | null>(null);
 
   const statusSummary = student.applications.reduce<Record<string, number>>((acc, app) => {
     acc[app.status] = (acc[app.status] || 0) + 1;
     return acc;
   }, {});
 
+  const totalCount = student.applications.length + student.acceptanceForms.length + student.checklists.length;
+
   return (
     <div className="border-b border-gray-100 last:border-b-0">
       <button
-        onClick={() => { setIsOpen(!isOpen); if (isOpen) setExpandedAppId(null); }}
+        onClick={() => { setIsOpen(!isOpen); if (isOpen) { setExpandedAppId(null); setExpandedFormId(null); setExpandedChecklistId(null); } }}
         className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left"
       >
         <div className="flex items-center gap-4 flex-1 min-w-0">
@@ -801,9 +684,26 @@ function StudentCard({ student, onStatusChange, onNoteAdded, onNoteDeleted }: {
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 flex-wrap">
               <span className="font-semibold text-gray-900">{student.name}</span>
-              <span className="text-xs text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                {student.applications.length} {student.applications.length === 1 ? 'application' : 'applications'}
-              </span>
+              {student.applications.filter(a => a.applicationType === 'new').length > 0 && (
+                <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">
+                  {student.applications.filter(a => a.applicationType === 'new').length} new
+                </span>
+              )}
+              {student.applications.filter(a => a.applicationType === 'renewal').length > 0 && (
+                <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-full">
+                  {student.applications.filter(a => a.applicationType === 'renewal').length} renewal
+                </span>
+              )}
+              {student.acceptanceForms.length > 0 && (
+                <span className="text-xs text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+                  {student.acceptanceForms.length} {student.acceptanceForms.length === 1 ? 'acceptance' : 'acceptances'}
+                </span>
+              )}
+              {student.checklists.length > 0 && (
+                <span className="text-xs text-teal-600 bg-teal-50 px-2 py-0.5 rounded-full">
+                  {student.checklists.length} {student.checklists.length === 1 ? 'checklist' : 'checklists'}
+                </span>
+              )}
               {Object.entries(statusSummary).map(([status]) => (
                 <StatusBadge key={status} status={status} />
               ))}
@@ -823,55 +723,192 @@ function StudentCard({ student, onStatusChange, onNoteAdded, onNoteDeleted }: {
       </button>
 
       {isOpen && (
-        <div className="px-6 pb-4 space-y-3">
-          {student.applications.map((app) => {
-            const isAppExpanded = expandedAppId === app._id;
-            return (
-              <div key={app._id}>
-                <button
-                  onClick={() => setExpandedAppId(isAppExpanded ? null : app._id)}
-                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors text-left"
-                >
-                  <div className="flex items-center gap-3 flex-1 min-w-0">
-                    <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <TypeBadge type={app.applicationType} />
-                      <StatusBadge status={app.status} />
-                      <span className="text-sm text-gray-600">{app.academicYear}</span>
-                      <span className="text-sm text-gray-400">{app.educationInfo.collegeName}</span>
+        <div className="px-6 pb-4 space-y-4">
+          {/* New Applications */}
+          {student.applications.filter(a => a.applicationType === 'new').length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">New Applications</p>
+              <div className="space-y-2">
+                {student.applications.filter(a => a.applicationType === 'new').map((app) => {
+                  const isAppExpanded = expandedAppId === app._id;
+                  return (
+                    <div key={app._id}>
+                      <button
+                        onClick={() => setExpandedAppId(isAppExpanded ? null : app._id)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 rounded-lg transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <FileText className="w-4 h-4 text-gray-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <StatusBadge status={app.status} />
+                            <span className="text-sm text-gray-600">{app.academicYear}</span>
+                            <span className="text-sm text-gray-400">{app.educationInfo.collegeName}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">{formatDate(app.submittedAt || app.createdAt)}</span>
+                          {isAppExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                        </div>
+                      </button>
+                      {isAppExpanded && (
+                        <div className="mt-2 ml-4">
+                          <ApplicationDetail app={app} onStatusChange={onStatusChange} onNoteAdded={onNoteAdded} onNoteDeleted={onNoteDeleted} />
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-xs text-gray-400">{formatDate(app.submittedAt || app.createdAt)}</span>
-                    {isAppExpanded ? (
-                      <ChevronUp className="w-4 h-4 text-gray-400" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-400" />
-                    )}
-                  </div>
-                </button>
-                {isAppExpanded && (
-                  <div className="mt-2 ml-4">
-                    <ApplicationDetail
-                      app={app}
-                      onStatusChange={onStatusChange}
-                      onNoteAdded={onNoteAdded}
-                      onNoteDeleted={onNoteDeleted}
-                    />
-                  </div>
-                )}
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
+
+          {/* Renewals */}
+          {student.applications.filter(a => a.applicationType === 'renewal').length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Renewals</p>
+              <div className="space-y-2">
+                {student.applications.filter(a => a.applicationType === 'renewal').map((app) => {
+                  const isAppExpanded = expandedAppId === app._id;
+                  return (
+                    <div key={app._id}>
+                      <button
+                        onClick={() => setExpandedAppId(isAppExpanded ? null : app._id)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <FileText className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <StatusBadge status={app.status} />
+                            <span className="text-sm text-gray-600">{app.academicYear}</span>
+                            <span className="text-sm text-gray-400">{app.educationInfo.collegeName}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">{formatDate(app.submittedAt || app.createdAt)}</span>
+                          {isAppExpanded ? <ChevronUp className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                        </div>
+                      </button>
+                      {isAppExpanded && (
+                        <div className="mt-2 ml-4">
+                          <ApplicationDetail app={app} onStatusChange={onStatusChange} onNoteAdded={onNoteAdded} onNoteDeleted={onNoteDeleted} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Acceptance Forms */}
+          {student.acceptanceForms.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Acceptances</p>
+              <div className="space-y-2">
+                {student.acceptanceForms.map((form) => {
+                  const isFormExpanded = expandedFormId === form._id;
+                  const hasPaymentInfo = !!(form.companyName || form.requestAmount || form.cardLastFour);
+                  return (
+                    <div key={form._id}>
+                      <button
+                        onClick={() => setExpandedFormId(isFormExpanded ? null : form._id)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <Award className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${form.acceptedTerms ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                              {form.acceptedTerms ? 'Terms Accepted' : 'Not Accepted'}
+                            </span>
+                            {hasPaymentInfo && (
+                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                                Payment Request
+                              </span>
+                            )}
+                            {form.requestAmount && (
+                              <span className="text-sm text-gray-600">{form.requestAmount}</span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">{formatDate(form.acceptedAt)}</span>
+                          {isFormExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          )}
+                        </div>
+                      </button>
+                      {isFormExpanded && (
+                        <div className="mt-2 ml-4">
+                          <AcceptanceFormDetail form={form} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Renewal Checklists */}
+          {student.checklists.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mb-2">Renewal Checklists</p>
+              <div className="space-y-2">
+                {student.checklists.map((cl) => {
+                  const isClExpanded = expandedChecklistId === cl._id;
+                  return (
+                    <div key={cl._id}>
+                      <button
+                        onClick={() => setExpandedChecklistId(isClExpanded ? null : cl._id)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-teal-50 hover:bg-teal-100 rounded-lg transition-colors text-left"
+                      >
+                        <div className="flex items-center gap-3 flex-1 min-w-0">
+                          <StickyNote className="w-4 h-4 text-teal-400 flex-shrink-0" />
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <StatusBadge status={cl.status} />
+                            <span className="text-sm text-gray-600">{cl.academicYear} — {cl.reportingPeriod}</span>
+                            <span className="text-sm text-gray-400">GPA: {cl.academicUpdate.currentGPA}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-400">{formatDate(cl.submittedAt || cl.createdAt)}</span>
+                          {isClExpanded ? (
+                            <ChevronUp className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <ChevronDown className="w-4 h-4 text-gray-400" />
+                          )}
+                        </div>
+                      </button>
+                      {isClExpanded && (
+                        <div className="mt-2 ml-4">
+                          <ChecklistDetail checklist={cl} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {totalCount === 0 && (
+            <p className="text-sm text-gray-400 text-center py-4">No records found for this student.</p>
+          )}
         </div>
       )}
     </div>
   );
 }
 
-// --- Group applications by student email ---
+// --- Group all records by student email ---
 
-function groupByStudent(applications: Application[]): StudentGroup[] {
+function groupByStudent(
+  applications: Application[],
+  acceptanceForms: AcceptanceFormData[],
+  checklists: RenewalChecklist[]
+): StudentGroup[] {
   const map = new Map<string, StudentGroup>();
 
   for (const app of applications) {
@@ -883,16 +920,70 @@ function groupByStudent(applications: Application[]): StudentGroup[] {
         college: app.educationInfo.collegeName,
         phone: app.personalInfo.phone,
         applications: [],
+        acceptanceForms: [],
+        checklists: [],
       });
     }
     map.get(email)!.applications.push(app);
   }
 
+  for (const form of acceptanceForms) {
+    const appEmail = typeof form.applicationId === 'object'
+      ? form.applicationId?.personalInfo?.email?.toLowerCase()
+      : null;
+    const userEmail = typeof form.userId === 'object'
+      ? form.userId?.email?.toLowerCase()
+      : null;
+    const email = appEmail || userEmail;
+
+    if (email && map.has(email)) {
+      map.get(email)!.acceptanceForms.push(form);
+    } else {
+      // Form with no matching application — create a standalone entry
+      const fallbackKey = `__form__${form._id}`;
+      const fallbackName = form.fullName
+        || (typeof form.userId === 'object' ? [form.userId?.profile?.firstName, form.userId?.profile?.lastName].filter(Boolean).join(' ') : null)
+        || 'Unknown Student';
+      map.set(fallbackKey, {
+        email: userEmail || '',
+        name: fallbackName,
+        college: '',
+        phone: '',
+        applications: [],
+        acceptanceForms: [form],
+        checklists: [],
+      });
+    }
+  }
+
+  for (const cl of checklists) {
+    const appEmail = typeof cl.applicationId === 'object'
+      ? cl.applicationId?.personalInfo?.email?.toLowerCase()
+      : null;
+    const userEmail = typeof cl.userId === 'object'
+      ? cl.userId?.email?.toLowerCase()
+      : null;
+    const email = appEmail || userEmail;
+
+    if (email && map.has(email)) {
+      map.get(email)!.checklists.push(cl);
+    }
+  }
+
   return Array.from(map.values()).sort((a, b) => {
-    const aDate = a.applications[0]?.createdAt || '';
-    const bDate = b.applications[0]?.createdAt || '';
+    const aDate = a.applications[0]?.createdAt || a.acceptanceForms[0]?.createdAt || '';
+    const bDate = b.applications[0]?.createdAt || b.acceptanceForms[0]?.createdAt || '';
     return bDate.localeCompare(aDate);
   });
+}
+
+function getAcademicYears(): string[] {
+  const currentYear = new Date().getFullYear();
+  const years: string[] = [];
+  for (let y = currentYear - 3; y <= currentYear + 1; y++) {
+    years.push(`${y}-${y + 1}`);
+  }
+  return years.reverse();
 }
 
 // --- Main Admin Page ---
@@ -904,11 +995,12 @@ export default function AdminPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [checklists, setChecklists] = useState<RenewalChecklist[]>([]);
   const [acceptanceForms, setAcceptanceForms] = useState<AcceptanceFormData[]>([]);
-  const [reimbursements, setReimbursements] = useState<ReimbursementRequest[]>([]);
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [typeFilter, setTypeFilter] = useState<string>('all');
+  const [yearFilter, setYearFilter] = useState<string>('all');
+  const [nameSearch, setNameSearch] = useState<string>('');
   const [siteSettings, setSiteSettings] = useState({ schoolYear: '', deadline: '' });
   const [settingsForm, setSettingsForm] = useState({ schoolYear: '', deadline: '' });
   const [settingsSaving, setSettingsSaving] = useState(false);
@@ -933,11 +1025,13 @@ export default function AdminPage() {
       .catch(() => {});
   }, []);
 
-  const fetchApplications = async () => {
+  const fetchApplications = async (applicationType?: string) => {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.set('status', statusFilter);
-      if (typeFilter !== 'all') params.set('applicationType', typeFilter);
+      const type = applicationType ?? (typeFilter !== 'all' ? typeFilter : undefined);
+      if (type) params.set('applicationType', type);
+      if (yearFilter !== 'all') params.set('academicYear', yearFilter);
       const res = await fetch(`${API_BASE}/api/applications?${params}`, { credentials: 'include' });
       const data = await res.json();
       if (data.success) setApplications(data.applications);
@@ -950,6 +1044,7 @@ export default function AdminPage() {
     try {
       const params = new URLSearchParams();
       if (statusFilter !== 'all') params.set('status', statusFilter);
+      if (yearFilter !== 'all') params.set('academicYear', yearFilter);
       const res = await fetch(`${API_BASE}/api/renewal-checklists?${params}`, { credentials: 'include' });
       const data = await res.json();
       if (data.success) setChecklists(data.checklists);
@@ -961,9 +1056,7 @@ export default function AdminPage() {
   const fetchAcceptanceForms = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/acceptance-forms`, { credentials: 'include' });
-      if (!res.ok) {
-        throw new Error(`Acceptance forms request failed (${res.status})`);
-      }
+      if (!res.ok) throw new Error(`Acceptance forms request failed (${res.status})`);
       const data = await res.json();
       if (data.success) setAcceptanceForms(data.forms);
       else throw new Error(data.message || 'Failed to fetch acceptance forms');
@@ -973,32 +1066,25 @@ export default function AdminPage() {
     }
   };
 
-  const fetchReimbursements = async () => {
-    try {
-      const params = new URLSearchParams();
-      if (statusFilter !== 'all') params.set('status', statusFilter);
-      const res = await fetch(`${API_BASE}/api/reimbursements?${params}`, { credentials: 'include' });
-      const data = await res.json();
-      if (data.success) setReimbursements(data.reimbursements);
-    } catch (err) {
-      console.error('Failed to fetch reimbursements:', err);
-    }
-  };
-
   const refresh = async () => {
     if (tab === 'settings') return;
     setLoading(true);
-    if (tab === 'students') await fetchApplications();
-    else if (tab === 'checklists') await fetchChecklists();
-    else if (tab === 'acceptance') await fetchAcceptanceForms();
-    else if (tab === 'reimbursements') await fetchReimbursements();
+    if (tab === 'students') {
+      await Promise.all([fetchApplications(), fetchAcceptanceForms(), fetchChecklists()]);
+    } else if (tab === 'new-applications') {
+      await fetchApplications('new');
+    } else if (tab === 'checklists') {
+      await fetchChecklists();
+    } else if (tab === 'acceptance') {
+      await fetchAcceptanceForms();
+    }
     setLoading(false);
   };
 
   useEffect(() => {
     setExpandedId(null);
     refresh();
-  }, [tab, statusFilter, typeFilter]);
+  }, [tab, statusFilter, typeFilter, yearFilter]);
 
   const handleStatusChange = (id: string, newStatus: AppStatus) => {
     setApplications((prev) =>
@@ -1026,12 +1112,6 @@ export default function AdminPage() {
     );
   };
 
-  const handleReimbursementStatusChange = (id: string, newStatus: ReimbursementStatus) => {
-    setReimbursements((prev) =>
-      prev.map((r) => (r._id === id ? { ...r, status: newStatus } : r))
-    );
-  };
-
   const handleSaveSettings = async () => {
     setSettingsSaving(true);
     setSettingsMsg('');
@@ -1056,12 +1136,22 @@ export default function AdminPage() {
     }
   };
 
-  const students = groupByStudent(applications);
+  const allStudents = groupByStudent(applications, acceptanceForms, checklists);
+  const students = nameSearch.trim()
+    ? allStudents.filter(s =>
+        s.name.toLowerCase().includes(nameSearch.toLowerCase()) ||
+        s.email.toLowerCase().includes(nameSearch.toLowerCase())
+      )
+    : allStudents;
+
+  const academicYears = getAcademicYears();
 
   const switchTab = (newTab: TabType) => {
     setTab(newTab);
     setStatusFilter('all');
     setTypeFilter('all');
+    setYearFilter('all');
+    setNameSearch('');
   };
 
   // Show nothing while checking auth
@@ -1073,47 +1163,68 @@ export default function AdminPage() {
     );
   }
 
+  const yearSelect = (
+    <select value={yearFilter} onChange={(e) => setYearFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+      <option value="all">All Years</option>
+      {academicYears.map(y => <option key={y} value={y}>{y}</option>)}
+    </select>
+  );
+
+  const statusSelect = (
+    <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+      <option value="all">All Statuses</option>
+      <option value="submitted">Submitted</option>
+      <option value="under_review">Under Review</option>
+      <option value="approved">Approved</option>
+      <option value="denied">Denied</option>
+    </select>
+  );
+
   const renderFilters = () => {
     if (tab === 'students') {
       return (
         <>
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-            <option value="all">All Statuses</option>
-            <option value="submitted">Submitted</option>
-            <option value="under_review">Under Review</option>
-            <option value="approved">Approved</option>
-            <option value="denied">Denied</option>
-          </select>
+          <input
+            type="search"
+            value={nameSearch}
+            onChange={(e) => setNameSearch(e.target.value)}
+            placeholder="Search by name or email..."
+            className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent w-56"
+          />
+          {statusSelect}
           <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
             <option value="all">All Types</option>
             <option value="new">New</option>
             <option value="renewal">Renewal</option>
           </select>
+          {yearSelect}
+        </>
+      );
+    }
+    if (tab === 'new-applications') {
+      return (
+        <>
+          {statusSelect}
+          {yearSelect}
         </>
       );
     }
     if (tab === 'checklists') {
       return (
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-          <option value="all">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="submitted">Submitted</option>
-          <option value="reviewed">Reviewed</option>
-        </select>
+        <>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
+            <option value="all">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="submitted">Submitted</option>
+            <option value="reviewed">Reviewed</option>
+          </select>
+          {yearSelect}
+        </>
       );
     }
-    if (tab === 'reimbursements') {
-      return (
-        <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 focus:border-transparent">
-          <option value="all">All Statuses</option>
-          <option value="pending">Pending</option>
-          <option value="approved">Approved</option>
-          <option value="denied">Denied</option>
-          <option value="paid">Paid</option>
-        </select>
-      );
+    if (tab === 'acceptance') {
+      return yearSelect;
     }
-    // acceptance and settings tabs have no filters
     return <span className="text-sm text-gray-400">No filters available</span>;
   };
 
@@ -1141,11 +1252,12 @@ export default function AdminPage() {
           <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
             <span className="text-sm font-medium text-gray-600">
               {students.length} {students.length === 1 ? 'student' : 'students'} — {applications.length} total {applications.length === 1 ? 'application' : 'applications'}
+              {nameSearch && ` (filtered by "${nameSearch}")`}
             </span>
           </div>
           {students.map((student) => (
             <StudentCard
-              key={student.email}
+              key={student.email || student.name}
               student={student}
               onStatusChange={handleStatusChange}
               onNoteAdded={handleNoteAdded}
@@ -1211,7 +1323,14 @@ export default function AdminPage() {
     }
 
     if (tab === 'acceptance') {
-      if (acceptanceForms.length === 0) {
+      const visibleForms = yearFilter === 'all'
+        ? acceptanceForms
+        : acceptanceForms.filter(f =>
+            typeof f.applicationId === 'object'
+              ? f.applicationId?.academicYear === yearFilter
+              : false
+          );
+      if (visibleForms.length === 0) {
         return (
           <div className="p-12 text-center text-gray-400">
             <Award className="w-8 h-8 mx-auto mb-3" />
@@ -1221,26 +1340,97 @@ export default function AdminPage() {
       }
       return (
         <div>
-          {acceptanceForms.map((form) => {
+          {visibleForms.map((form) => {
             const isExpanded = expandedId === form._id;
+            const studentName =
+              (typeof form.applicationId === 'object' ? form.applicationId?.personalInfo?.fullName : null)
+              || form.fullName
+              || (typeof form.userId === 'object' ? [form.userId?.profile?.firstName, form.userId?.profile?.lastName].filter(Boolean).join(' ') : null)
+              || 'Unknown Student';
+            const studentEmail =
+              (typeof form.applicationId === 'object' ? form.applicationId?.personalInfo?.email : null)
+              || (typeof form.userId === 'object' ? form.userId?.email : null)
+              || null;
+            const hasPaymentInfo = !!(form.companyName || form.requestAmount || form.cardLastFour);
             return (
               <div key={form._id} className="border-b border-gray-100 last:border-b-0">
                 <button onClick={() => setExpandedId(isExpanded ? null : form._id)} className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-gray-900">Acceptance Form</span>
+                      <span className="font-semibold text-gray-900">{studentName}</span>
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${form.acceptedTerms ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                         {form.acceptedTerms ? 'Accepted' : 'Not Accepted'}
                       </span>
+                      {hasPaymentInfo && (
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-700">
+                          Payment Request
+                        </span>
+                      )}
                     </div>
                     <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                      {studentEmail && <span>{studentEmail}</span>}
                       <span>Accepted: {formatDate(form.acceptedAt)}</span>
-                      <span>IP: {form.ipAddress}</span>
+                      {form.requestAmount && <span>Amount: {form.requestAmount}</span>}
                     </div>
                   </div>
                   {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
                 </button>
                 {isExpanded && <div className="px-6 pb-4"><AcceptanceFormDetail form={form} /></div>}
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+
+    if (tab === 'new-applications') {
+      if (applications.length === 0) {
+        return (
+          <div className="p-12 text-center text-gray-400">
+            <FileText className="w-8 h-8 mx-auto mb-3" />
+            <p>No new applications found.</p>
+          </div>
+        );
+      }
+      return (
+        <div>
+          <div className="px-6 py-3 bg-gray-50 border-b border-gray-200">
+            <span className="text-sm font-medium text-gray-600">
+              {applications.length} {applications.length === 1 ? 'application' : 'applications'}
+            </span>
+          </div>
+          {applications.map((app) => {
+            const isExpanded = expandedId === app._id;
+            return (
+              <div key={app._id} className="border-b border-gray-100 last:border-b-0">
+                <button
+                  onClick={() => setExpandedId(isExpanded ? null : app._id)}
+                  className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-gray-900">{app.personalInfo.fullName}</span>
+                      <StatusBadge status={app.status} />
+                      <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded-full">{app.academicYear}</span>
+                    </div>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
+                      <span>{app.personalInfo.email}</span>
+                      <span>{app.educationInfo.collegeName}</span>
+                      <span>{formatDate(app.submittedAt || app.createdAt)}</span>
+                    </div>
+                  </div>
+                  {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
+                </button>
+                {isExpanded && (
+                  <div className="px-6 pb-4">
+                    <ApplicationDetail
+                      app={app}
+                      onStatusChange={handleStatusChange}
+                      onNoteAdded={handleNoteAdded}
+                      onNoteDeleted={handleNoteDeleted}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
@@ -1299,44 +1489,6 @@ export default function AdminPage() {
       );
     }
 
-    if (tab === 'reimbursements') {
-      if (reimbursements.length === 0) {
-        return (
-          <div className="p-12 text-center text-gray-400">
-            <DollarSign className="w-8 h-8 mx-auto mb-3" />
-            <p>No reimbursement requests found.</p>
-          </div>
-        );
-      }
-      return (
-        <div>
-          {reimbursements.map((r) => {
-            const isExpanded = expandedId === r._id;
-            return (
-              <div key={r._id} className="border-b border-gray-100 last:border-b-0">
-                <button onClick={() => setExpandedId(isExpanded ? null : r._id)} className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors text-left">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="font-medium text-gray-900">{formatCurrency(r.amount)}</span>
-                      <RequestTypeBadge type={r.requestType} />
-                      <StatusBadge status={r.status} />
-                    </div>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-                      <span>{r.description}</span>
-                      <span>To: {r.paymentInfo.payableTo}</span>
-                      <span>{formatDate(r.submittedAt || r.createdAt)}</span>
-                    </div>
-                  </div>
-                  {isExpanded ? <ChevronUp className="w-5 h-5 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-5 h-5 text-gray-400 flex-shrink-0" />}
-                </button>
-                {isExpanded && <div className="px-6 pb-4"><ReimbursementDetail reimbursement={r} onStatusChange={handleReimbursementStatusChange} /></div>}
-              </div>
-            );
-          })}
-        </div>
-      );
-    }
-
     return null;
   };
 
@@ -1352,7 +1504,7 @@ export default function AdminPage() {
               </Link>
               <div>
                 <h1 className="text-2xl font-bold text-indigo-900">Admin Dashboard</h1>
-                <p className="text-sm text-gray-500">Review applications, checklists, acceptances, and reimbursements</p>
+                <p className="text-sm text-gray-500">Review applications, acceptances, and checklists</p>
               </div>
             </div>
             {tab !== 'settings' && (
@@ -1373,10 +1525,10 @@ export default function AdminPage() {
         {/* Tabs */}
         <div className="flex gap-1 bg-white rounded-lg shadow-md p-1 mb-6">
           {([
-            { key: 'students' as TabType, label: 'Students', icon: Users },
-            { key: 'checklists' as TabType, label: 'Checklists', icon: StickyNote },
+            { key: 'students' as TabType, label: 'Accounts', icon: Users },
+            { key: 'new-applications' as TabType, label: 'New Applications', icon: FileText },
+            { key: 'checklists' as TabType, label: 'Renewal Checklists', icon: StickyNote },
             { key: 'acceptance' as TabType, label: 'Acceptances', icon: Award },
-            { key: 'reimbursements' as TabType, label: 'Reimbursements', icon: DollarSign },
             { key: 'settings' as TabType, label: 'Settings', icon: Settings },
           ]).map(({ key, label, icon: Icon }) => (
             <button

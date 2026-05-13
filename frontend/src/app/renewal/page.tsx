@@ -68,6 +68,20 @@ export default function RenewalScholarshipPortal(): React.ReactElement {
   }, [authLoading, user, router]);
 
   const userId = user?._id || '000000000000000000000000';
+  const [approvedApplicationId, setApprovedApplicationId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+    fetch(`${API_BASE}/api/applications/mine`, { credentials: 'include' })
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && Array.isArray(data.applications)) {
+          const approved = data.applications.find((a: { status: string }) => a.status === 'approved');
+          if (approved) setApprovedApplicationId(approved._id);
+        }
+      })
+      .catch(() => {});
+  }, [user]);
 
   if (authLoading || !user) return <></> as React.ReactElement;
   const [formData, setFormData] = useState<FormData>({
@@ -156,7 +170,7 @@ export default function RenewalScholarshipPortal(): React.ReactElement {
       // Map form data to RenewalChecklist schema
       const checklistData = {
         userId,
-        applicationId: '000000000000000000000000', // TODO: link to actual application
+        applicationId: approvedApplicationId || '000000000000000000000000',
         academicYear: siteSettings.schoolYear,
         reportingPeriod: formData.reportingPeriod || 'Not specified',
         academicUpdate: {
@@ -179,12 +193,11 @@ export default function RenewalScholarshipPortal(): React.ReactElement {
       };
 
       // Call backend API for renewal checklist
-      const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080'}/api/renewal-checklists`, {
+      const response = await fetch(`${API_BASE}/api/renewal-checklists`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(checklistData)
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(checklistData),
       });
 
       const result = await response.json();
