@@ -9,7 +9,8 @@ import User from '../models/User';
 passport.use(
     new LocalStrategy({ usernameField: 'email' }, async (email: string, password: string, done) => {
         try {
-            const userWithPassword = await User.findOne({ email }).select('+password').exec();
+            const normalizedEmail = email.trim().toLowerCase();
+            const userWithPassword = await User.findOne({ email: normalizedEmail }).select('+password').exec();
             if (!userWithPassword) return done(null, false, { message: 'Email or password is incorrect' });
 
             const isMatch = await comparePassword(password, userWithPassword.password);
