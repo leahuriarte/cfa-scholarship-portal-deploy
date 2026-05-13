@@ -9,13 +9,13 @@ type Mode = "choose" | "student-login" | "student-register" | "admin-login";
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, register, user, loading } = useAuth();
+  const { login, register, user, loading, isAdmin } = useAuth();
 
   useEffect(() => {
     if (!loading && user) {
-      router.push('/');
+      router.push(isAdmin ? '/admin' : '/');
     }
-  }, [loading, user, router]);
+  }, [loading, user, isAdmin, router]);
   const [mode, setMode] = useState<Mode>("choose");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -98,6 +98,9 @@ export default function LoginPage() {
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Supporting present and former foster youth in pursuing their academic and
             vocational education goals.
+          </p>
+          <p className="mt-3 text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-md px-4 py-2 inline-block">
+            For the best experience, please use Google Chrome.
           </p>
         </div>
 

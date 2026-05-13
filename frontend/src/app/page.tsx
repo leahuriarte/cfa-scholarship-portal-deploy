@@ -77,6 +77,10 @@ export default function Home() {
     };
   }, [loading, user, isAdmin]);
 
+  const hasApprovedNew = applications.some(
+    app => app.status === 'approved' && app.applicationType === 'new'
+  );
+
   if (loading || !user) return null;
 
   return (
