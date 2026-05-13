@@ -7,7 +7,7 @@ import {
   ClipboardList, ChevronDown, ChevronUp, Filter, RefreshCw,
   CheckCircle, XCircle, Clock, Send, ArrowLeft, StickyNote,
   GraduationCap, User, Briefcase, Home, FileText, MessageSquare,
-  Users, DollarSign, Award, Settings
+  Users, DollarSign, Award, Settings, LogOut
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 
@@ -1389,7 +1389,7 @@ function getAcademicYears(): string[] {
 // --- Main Admin Page ---
 
 export default function AdminPage() {
-  const { user, loading: authLoading, isAdmin } = useAuth();
+  const { user, loading: authLoading, isAdmin, logout } = useAuth();
   const router = useRouter();
   const [tab, setTab] = useState<TabType>('students');
   const [applications, setApplications] = useState<Application[]>([]);
@@ -1941,16 +1941,25 @@ export default function AdminPage() {
                 <p className="text-sm text-gray-500">Review applications, acceptances, and checklists</p>
               </div>
             </div>
-            {tab !== 'settings' && (
+            <div className="flex items-center gap-2">
+              {tab !== 'settings' && (
+                <button
+                  onClick={refresh}
+                  disabled={loading}
+                  className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                >
+                  <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+                  Refresh
+                </button>
+              )}
               <button
-                onClick={refresh}
-                disabled={loading}
-                className="inline-flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 transition-colors"
+                onClick={logout}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-50 hover:text-gray-800 transition-colors"
               >
-                <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-                Refresh
+                <LogOut className="w-4 h-4" />
+                Log out
               </button>
-            )}
+            </div>
           </div>
         </div>
       </div>
